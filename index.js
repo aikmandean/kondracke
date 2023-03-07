@@ -16,6 +16,8 @@ function attachCelery(newProducer, newConsumer) {
     consumer = newConsumer
 }
 
+let runningTaskId = ""
+
 /** @type {Record<string, ReturnType<typeof producer["createTask"]>[]>} */
 const reactions = {}
 /** @type {Record<string, boolean>>} */
@@ -27,24 +29,23 @@ function declareTask(name) {
     return {
         name,
         define(callback) {
-            consumer.register(name, async (props, ...activeTaskIds) => {
+            consumer.register(name, async function (props, ...activeTaskIds) {
                 try {
                     if(activeTaskIds.length == 1) {
                         const result = await callback(props)
                         reactions[name].forEach(task => task.run(result))
                         return result
                     }
-                    // else {
-                    //     activeTaskIds.forEach(taskId => taskId in schedules ? {} : schedules[taskId] = false)
-                    //     schedules[]
-                    //     activeTaskIds.pop()
-                    //     const waitingResults = activeTaskIds.map(x => producer.asyncResult(x).get())
-                    //     const activeResults = await Promise.all(waitingResults)
-
-                    //     const result = await callback(props, ...activeResults)
-                    //     reactions[name].forEach(task => task.run(result))
-                    //     return result
-                    // }
+                    else {
+                        activeTaskIds.pop()
+                        const waitingResults = activeTaskIds.map(x => producer.asyncResult(x).get())
+                        const activeResults = await Promise.all(waitingResults)
+                        // console.log("Active restults: ", activeResults);
+                        const result = await callback(props, ...activeResults)
+                        // console.log("Result: ", result);
+                        reactions[name].forEach(task => task.run(result))
+                        return result
+                    }
                     
     
                 } catch (error) {
@@ -54,7 +55,9 @@ function declareTask(name) {
             })
         },
         run(props = {}, ...activeTasks) {
-            return taskCreator.applyAsync([props].concat(activeTasks.map(t => t.taskId)))
+            const latestTask = taskCreator.applyAsync([props].concat(activeTasks.map(t => t.taskId)))
+            runningTaskId = latestTask.taskId
+            return latestTask
         }
     }   
 }
